@@ -88,11 +88,11 @@ function Main() {
             onClick={() =>
               generateUI(
                 !thread || !thread.messages
-                  ? "Reschedule all Monday Bookings please <3!"
+                  ? "Reschedule all Friday Bookings. Please explain that I catch the flu and I will not be able to make it :,c"
                   : "Show me the insights please <3!"
               )
             }>
-            {!thread || !thread.messages ? "Reschedule Monday Bookings" : "Load Insights"}
+            {!thread || !thread.messages ? "Reschedule Friday Bookings" : "Load Insights"}
           </Button>
         }>
         <ResponsiveGridLayout
@@ -172,7 +172,7 @@ const InsightsBasedElement = () => {
   );
 };
 
-const RescheduleComponent = ({ day }: { day: Dayjs }) => {
+const RescheduleComponent = ({ day, reason }: { day: Dayjs; reason: string }) => {
   const { data: filterQuery } = useFilterQuery();
   const { t } = useLocale();
   const utils = trpc.useUtils();
@@ -262,7 +262,7 @@ const RescheduleComponent = ({ day }: { day: Dayjs }) => {
               if (bookingDate.isBetween(startOfDay, endOfDay, null, "[]")) {
                 rescheduleApi({
                   bookingId: booking.uid,
-                  rescheduleReason: "Test",
+                  rescheduleReason: reason || "",
                 });
               }
             }
@@ -270,7 +270,7 @@ const RescheduleComponent = ({ day }: { day: Dayjs }) => {
         }
       }
     }
-  }, [day, query.data, rescheduleApi, isReschedulePending]);
+  }, [day, query.data, rescheduleApi, isReschedulePending, reason]);
 
   useEffect(() => {
     // If !isPending is true schedule is not undefined, but this helps TypeScript to know it too!
@@ -346,8 +346,13 @@ const availableComponents: ExposedComponent[] = [
         required: true,
         enum: ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
       },
+      reason: {
+        type: "string",
+        description: "Reason for the reschedule (if not specified just say: `I'll explain you later.`)",
+        required: true,
+      },
     },
-    loader: ({ day }) => {
+    loader: ({ day, reason }) => {
       const now = dayjs();
       const days = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
       const targetWeekday = days.indexOf(day.toLowerCase());
@@ -361,6 +366,7 @@ const availableComponents: ExposedComponent[] = [
 
       return {
         day: nextTargetDay,
+        reason,
       };
     },
     extraData: {
