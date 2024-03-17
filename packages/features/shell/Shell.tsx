@@ -45,7 +45,6 @@ import {
   ROADMAP,
   WEBAPP_URL,
   IS_VISUAL_REGRESSION_TESTING,
-  TOP_BANNER_HEIGHT,
   ENABLE_PROFILE_SWITCHER,
 } from "@calcom/lib/constants";
 import { useFormbricks } from "@calcom/lib/formbricks-client";
@@ -244,7 +243,8 @@ const Layout = (props: LayoutProps) => {
       Object.entries(banners).filter(([_, value]) => {
         return value && (!Array.isArray(value) || value.length > 0);
       });
-    return (activeBanners?.length ?? 0) * TOP_BANNER_HEIGHT;
+    // return (activeBanners?.length ?? 0) * TOP_BANNER_HEIGHT;
+    return 0;
   }, [banners]);
 
   useFormbricks();
@@ -276,8 +276,10 @@ const Layout = (props: LayoutProps) => {
                 const Banner = BannerComponent[key];
                 return <Banner data={banners[key]} key={key} />;
               } else if (key === "verifyEmailBanner") {
-                const Banner = BannerComponent[key];
-                return <Banner data={banners[key]} key={key} />;
+                /* const Banner = BannerComponent[key];
+                return <Banner data={banners[key]} key={key} />; */
+
+                return null;
               } else if (key === "adminPasswordBanner") {
                 const Banner = BannerComponent[key];
                 return <Banner data={banners[key]} key={key} />;

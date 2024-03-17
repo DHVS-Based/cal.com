@@ -5,7 +5,7 @@ import React, { Fragment, useEffect } from "react";
 
 import { SUPPORT_MAIL_ADDRESS, WEBAPP_URL } from "@calcom/lib/constants";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { EmptyScreen, Alert } from "@calcom/ui";
+import { EmptyScreen } from "@calcom/ui";
 import { AlertTriangle } from "@calcom/ui/components/icon";
 
 type LicenseRequiredProps = {
@@ -37,7 +37,7 @@ const LicenseRequired = ({ children, as = "", ...rest }: LicenseRequiredProps) =
       ) : process.env.NODE_ENV === "development" ? (
         /** We only show a warning in development mode, but allow the feature to be displayed for development/testing purposes */
         <>
-          <Alert
+          {/* <Alert
             className="mb-4"
             severity="warning"
             title={
@@ -53,7 +53,7 @@ const LicenseRequired = ({ children, as = "", ...rest }: LicenseRequiredProps) =
                 </Trans>
               </>
             }
-          />
+          /> */}
           {children}
         </>
       ) : (
