@@ -1,11 +1,14 @@
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import React, { useMemo, useState } from "react";
+import type { UseFormReturn } from "react-hook-form";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import dayjs from "@calcom/dayjs";
 import { DateOverrideInputDialog, DateOverrideList } from "@calcom/features/schedules";
 import Schedule from "@calcom/features/schedules/components/Schedule";
 import Shell from "@calcom/features/shell/Shell";
+import type { ScheduleWithAvailabilitiesForWeb } from "@calcom/lib";
 import { classNames } from "@calcom/lib";
 import { availabilityAsString } from "@calcom/lib/availability";
 import { withErrorFromUnknown } from "@calcom/lib/getClientErrorFromUnknown";
@@ -177,6 +180,53 @@ const SmallScreenSideBar = ({ open, children }: { open: boolean; children: JSX.E
     </div>
   );
 };
+
+export const AvailabilityForm: React.FC<{
+  updateMutation: unknown;
+  form: UseFormReturn<AvailabilityFormValues>;
+  scheduleId: number;
+  me: unknown;
+  schedule: ScheduleWithAvailabilitiesForWeb | undefined;
+  children: ReactNode;
+}> = ({ updateMutation, form, scheduleId, me, schedule, children }) => {
+  return (
+    <Form
+      form={form}
+      id="availability-form"
+      handleSubmit={async ({ dateOverrides, ...values }) => {
+        scheduleId &&
+          updateMutation.mutate({
+            scheduleId,
+            dateOverrides: dateOverrides.flatMap((override) => override.ranges),
+            ...values,
+          });
+      }}
+      className="flex flex-col sm:mx-0 xl:flex-row xl:space-x-6">
+      <div className="flex-1 flex-row xl:mr-0">
+        <div className="border-subtle mb-6 rounded-md border">
+          <div>
+            {typeof me.data?.weekStart === "string" && (
+              <Schedule
+                control={form.control}
+                name="schedule"
+                weekStart={
+                  ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].indexOf(
+                    me.data?.weekStart
+                  ) as 0 | 1 | 2 | 3 | 4 | 5 | 6
+                }
+              />
+            )}
+          </div>
+        </div>
+        <div className="border-subtle my-6 rounded-md border">
+          {schedule?.workingHours && <DateOverride workingHours={schedule.workingHours} />}
+        </div>
+      </div>
+      {children}
+    </Form>
+  );
+};
+
 export default function Availability() {
   const searchParams = useCompatSearchParams();
   const { t, i18n } = useLocale();
@@ -404,38 +454,12 @@ export default function Availability() {
         </div>
       }>
       <div className="mt-4 w-full md:mt-0">
-        <Form
+        <AvailabilityForm
+          updateMutation={updateMutation}
           form={form}
-          id="availability-form"
-          handleSubmit={async ({ dateOverrides, ...values }) => {
-            scheduleId &&
-              updateMutation.mutate({
-                scheduleId,
-                dateOverrides: dateOverrides.flatMap((override) => override.ranges),
-                ...values,
-              });
-          }}
-          className="flex flex-col sm:mx-0 xl:flex-row xl:space-x-6">
-          <div className="flex-1 flex-row xl:mr-0">
-            <div className="border-subtle mb-6 rounded-md border">
-              <div>
-                {typeof me.data?.weekStart === "string" && (
-                  <Schedule
-                    control={form.control}
-                    name="schedule"
-                    weekStart={
-                      ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].indexOf(
-                        me.data?.weekStart
-                      ) as 0 | 1 | 2 | 3 | 4 | 5 | 6
-                    }
-                  />
-                )}
-              </div>
-            </div>
-            <div className="border-subtle my-6 rounded-md border">
-              {schedule?.workingHours && <DateOverride workingHours={schedule.workingHours} />}
-            </div>
-          </div>
+          scheduleId={scheduleId}
+          me={me}
+          schedule={schedule}>
           <div className="min-w-40 col-span-3 hidden space-y-2 md:block lg:col-span-1">
             <div className="xl:max-w-80 w-full pr-4 sm:ml-0 sm:mr-36 sm:p-0">
               <div>
@@ -474,7 +498,7 @@ export default function Availability() {
               </div>
             </div>
           </div>
-        </Form>
+        </AvailabilityForm>
       </div>
     </Shell>
   );
