@@ -7,7 +7,7 @@ import type {
   FunctionMessage,
   TextMessage,
 } from "@pages/based/based.js/BasedThreadContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import { useForm } from "react-hook-form";
@@ -172,12 +172,16 @@ const InsightsBasedElement = () => {
   );
 };
 
-const RescheduleComponent = ({ day, reason }: { day: Dayjs; reason: string }) => {
-  const { data: filterQuery } = useFilterQuery();
+const LockAvailability = ({ day, booking: { eventType } }) => {
   const { t } = useLocale();
-  const utils = trpc.useUtils();
   const me = useMeQuery();
-  const scheduleId = 27;
+  const utils = trpc.useUtils();
+
+  const { data } = trpc.viewer.eventTypes.get.useQuery({
+    id: eventType.id,
+  });
+
+  const scheduleId = data?.eventType.schedule as number | undefined;
   const { data: schedule, isPending } = trpc.viewer.availability.schedule.get.useQuery(
     { scheduleId },
     {
@@ -218,60 +222,6 @@ const RescheduleComponent = ({ day, reason }: { day: Dayjs; reason: string }) =>
     },
   });
 
-  const query = trpc.viewer.bookings.get.useInfiniteQuery(
-    {
-      limit: 100,
-      filters: {
-        ...filterQuery,
-        status: "upcoming",
-      },
-    },
-    {
-      enabled: true,
-      getNextPageParam: (lastPage) => lastPage.nextCursor,
-    }
-  );
-
-  const { mutate: rescheduleApi, isPending: isReschedulePending } =
-    trpc.viewer.bookings.requestReschedule.useMutation({
-      async onSuccess() {
-        await utils.viewer.bookings.invalidate();
-        showToast("Reschedule requests sent!", "success");
-      },
-      onError() {
-        // @TODO: notify sentry
-      },
-    });
-
-  useEffect(() => {
-    if (day && !isReschedulePending) {
-      const startOfDay = day.utc().startOf("day");
-      const endOfDay = day.utc().endOf("day");
-
-      // Reschedule bookings
-      if (query.data && query.data?.pages) {
-        for (let i = 0; i < query.data?.pages.length; i++) {
-          const page = query.data?.pages[i];
-          page.bookings.map(
-            (booking: {
-              startTime: string | number | Date | Dayjs | null | undefined;
-              title: string;
-              uid: string;
-            }) => {
-              const bookingDate = dayjs(booking.startTime);
-              if (bookingDate.isBetween(startOfDay, endOfDay, null, "[]")) {
-                rescheduleApi({
-                  bookingId: booking.uid,
-                  rescheduleReason: reason || "",
-                });
-              }
-            }
-          );
-        }
-      }
-    }
-  }, [day, query.data, rescheduleApi, isReschedulePending, reason]);
-
   useEffect(() => {
     // If !isPending is true schedule is not undefined, but this helps TypeScript to know it too!
     if (!isPending && schedule) {
@@ -303,14 +253,86 @@ const RescheduleComponent = ({ day, reason }: { day: Dayjs; reason: string }) =>
   }, [day, isPending]);
 
   return (
+    <AvailabilityForm
+      updateMutation={updateMutation}
+      form={form}
+      scheduleId={scheduleId}
+      me={me}
+      schedule={schedule}
+    />
+  );
+};
+
+const RescheduleComponent = ({ day, reason }: { day: Dayjs; reason: string }) => {
+  const { data: filterQuery } = useFilterQuery();
+  const utils = trpc.useUtils();
+  const [bookings, setBookings] = useState([]);
+
+  const query = trpc.viewer.bookings.get.useInfiniteQuery(
+    {
+      limit: 100,
+      filters: {
+        ...filterQuery,
+        status: "upcoming",
+      },
+    },
+    {
+      enabled: true,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+    }
+  );
+
+  const { mutate: rescheduleApi, isPending: isReschedulePending } =
+    trpc.viewer.bookings.requestReschedule.useMutation({
+      async onSuccess() {
+        await utils.viewer.bookings.invalidate();
+        showToast("Reschedule requests sent!", "success");
+      },
+      onError() {
+        // @TODO: notify sentry
+      },
+    });
+
+  useEffect(() => {
+    if (day && !isReschedulePending) {
+      const startOfDay = day.utc().startOf("day");
+      const endOfDay = day.utc().endOf("day");
+
+      const bookings = [];
+      // Reschedule bookings
+      if (query.data && query.data?.pages) {
+        for (let i = 0; i < query.data?.pages.length; i++) {
+          const page = query.data?.pages[i];
+          page.bookings.map(
+            (booking: {
+              startTime: string | number | Date | Dayjs | null | undefined;
+              title: string;
+              uid: string;
+            }) => {
+              const bookingDate = dayjs(booking.startTime);
+              if (bookingDate.isBetween(startOfDay, endOfDay, null, "[]")) {
+                bookings.push(booking);
+                rescheduleApi({
+                  bookingId: booking.uid,
+                  rescheduleReason: reason || "",
+                });
+              }
+            }
+          );
+        }
+
+        if (bookings.length) {
+          setBookings(bookings);
+        }
+      }
+    }
+  }, [day, query.data, rescheduleApi, isReschedulePending, reason]);
+
+  return (
     <div className="flex gap-4">
-      <AvailabilityForm
-        updateMutation={updateMutation}
-        form={form}
-        scheduleId={scheduleId}
-        me={me}
-        schedule={schedule}
-      />
+      {bookings.length
+        ? bookings.map((booking) => <LockAvailability key={`${booking.uid}`} day={day} booking={booking} />)
+        : null}
     </div>
   );
 };
