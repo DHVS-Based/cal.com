@@ -608,15 +608,21 @@ const CreateEventType = ({
     (teamProfile?.membershipRole === MembershipRole.OWNER ||
       teamProfile?.membershipRole === MembershipRole.ADMIN);
 
+  const urlPrefix = orgBranding?.fullDomain ?? process.env.NEXT_PUBLIC_WEBSITE_URL;
+
   const createMutation = trpc.viewer.eventTypes.create.useMutation({
     onSuccess: async ({ eventType }) => {
       await utils.viewer.eventTypes.getByViewer.invalidate();
+      navigator.clipboard.writeText(
+        `${urlPrefix}/${!isManagedEventType ? pageSlug : t("username_placeholder")}/${form.getValues("slug")}`
+      );
       showToast(
         t("event_type_created_successfully", {
           eventTypeTitle: eventType.title,
         }),
         "success"
       );
+      showToast("Link copied to clipboard!", "success");
       form.reset();
     },
     onError: (err) => {
@@ -636,8 +642,6 @@ const CreateEventType = ({
       }
     },
   });
-
-  const urlPrefix = orgBranding?.fullDomain ?? process.env.NEXT_PUBLIC_WEBSITE_URL;
 
   if (!data) return null;
 
@@ -778,6 +782,12 @@ const CreateEventType = ({
           </div>
         )}
       </div>
+      <hr className="border-subtle" />
+      <div className="flex justify-end space-x-2 pb-8 pt-4 rtl:space-x-reverse">
+        <Button type="submit" loading={createMutation.isPending}>
+          {t("continue")}
+        </Button>
+      </div>
     </Form>
   );
 };
@@ -887,7 +897,7 @@ const availableComponents: ExposedComponent[] = [
       };
     },
     extraData: {
-      height: 12,
+      height: 13,
       width: { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 },
     },
   },
