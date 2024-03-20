@@ -13,15 +13,16 @@ import { Responsive, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import { useForm } from "react-hook-form";
 import "react-resizable/css/styles.css";
-import type { z } from "zod";
+import { z } from "zod";
 
 import type { Dayjs } from "@calcom/dayjs";
 import dayjs from "@calcom/dayjs";
 import { useFilterQuery } from "@calcom/features/bookings/lib/useFilterQuery";
 import { useOrgBranding } from "@calcom/features/ee/organizations/context/provider";
 import { getTeamsFiltersFromQuery } from "@calcom/features/filters/lib/getTeamsFiltersFromQuery";
-import { BookingStatusLineChart } from "@calcom/features/insights/components";
-import { FiltersProvider } from "@calcom/features/insights/context/FiltersProvider";
+import { BookingKPICards, BookingStatusLineChart } from "@calcom/features/insights/components";
+import type { FilterContextType } from "@calcom/features/insights/context/provider";
+import { FilterProvider } from "@calcom/features/insights/context/provider";
 import { Filters } from "@calcom/features/insights/filters";
 import Shell from "@calcom/features/shell/Shell";
 import { classNames } from "@calcom/lib";
@@ -52,6 +53,7 @@ function Main() {
     availableComponents,
     availableFunctions
   );
+  const [instruction, setInstruction] = useState("");
 
   console.log("\n== thread ==\n", thread, "\n");
 
@@ -73,8 +75,8 @@ function Main() {
                 const component = availableComponents.find((comp) => comp.name === message.content.name);
                 return {
                   i: `based-component-${index}`,
-                  x: 0,
-                  y: Infinity,
+                  x: index === 1 ? 12 : 0,
+                  y: index === 0 ? 30 : index === 1 ? 30 : index === 2 ? 0 : 0,
                   w:
                     component && component.extraData.width[breakpoint]
                       ? component.extraData.width[breakpoint]
@@ -97,21 +99,22 @@ function Main() {
         withoutMain={false}
         subtitle="Use Based to do this thing easy to use."
         CTA={
-          <Button
-            onClick={() =>
-              generateUI(
-                !thread || !thread.messages
-                  ? "Create a new event type to onboard users into the streamers dashboard of my Twitch extension called Qapla, regularly an onboarding lasts around 45 minutes"
-                  : "Show me the insights please <3!"
-              )
-            }>
+          <Button onClick={() => generateUI(instruction)}>
             {/* ? "Reschedule all Friday Bookings. Please explain that I catch the flu and I will not be able to make it :,c" */}
-            {!thread || !thread.messages ? "Create event type" : "Load Insights"}
+            {/* ? "Create a new event type to onboard users into the streamers dashboard of my Twitch extension called Qapla, regularly an onboarding lasts around 45 minutes" */}
+            Execute
           </Button>
         }>
+        <TextField label="Instruction" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
         <ResponsiveGridLayout
           breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-          cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
+          cols={
+            thread &&
+            thread.messages &&
+            thread.messages.filter(({ role }) => role === "component").length >= 2
+              ? { lg: 24, md: 20, sm: 12, xs: 8, xxs: 4 }
+              : { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }
+          }
           layouts={layouts}
           rowHeight={30}
           resizable={true}>
@@ -145,7 +148,169 @@ export default function BasedPage() {
 
 BasedPage.PageWrapper = PageWrapper;
 
-const InsightsBasedElement = () => {
+const querySchema = z.object({
+  startTime: z.string().nullable(),
+  endTime: z.string().nullable(),
+  teamId: z.coerce.number().nullable(),
+  userId: z.coerce.number().nullable(),
+  memberUserId: z.coerce.number().nullable(),
+  eventTypeId: z.coerce.number().nullable(),
+  filter: z.enum(["event-type", "user"]).nullable(),
+});
+
+export function FiltersProvider({
+  children,
+  startTime,
+  endTime,
+}: {
+  children: React.ReactNode;
+  startTime?: string;
+  endTime?: string;
+}) {
+  const utils = trpc.useContext();
+  const { data: user } = useMeQuery();
+
+  let startTimeParsed,
+    endTimeParsed,
+    teamIdParsed: number | undefined | null,
+    userIdParsed,
+    eventTypeIdParsed,
+    filterParsed,
+    memberUserIdParsed;
+
+  const safe = querySchema.safeParse({
+    startTime,
+    endTime,
+    teamId: 16,
+    userId: user?.id,
+    eventTypeId: null,
+    filter: null,
+    memberUserId: null,
+  });
+
+  if (!safe.success) {
+    console.error("Failed to parse query params");
+  } else {
+    startTimeParsed = safe.data.startTime;
+    endTimeParsed = safe.data.endTime;
+    teamIdParsed = safe.data.teamId;
+    userIdParsed = safe.data.userId;
+    eventTypeIdParsed = safe.data.eventTypeId;
+    filterParsed = safe.data.filter;
+    memberUserIdParsed = safe.data.memberUserId;
+  }
+
+  const [configFilters, setConfigFilters] = useState<FilterContextType["filter"]>({
+    dateRange: [
+      startTimeParsed ? dayjs(startTimeParsed) : dayjs().subtract(1, "week"),
+      endTimeParsed ? dayjs(endTimeParsed) : dayjs(),
+      "w",
+    ],
+    selectedTimeView: "week",
+    selectedUserId: userIdParsed || null,
+    selectedMemberUserId: memberUserIdParsed || null,
+    selectedTeamId: teamIdParsed || null,
+    selectedTeamName: null,
+    selectedEventTypeId: eventTypeIdParsed || null,
+    selectedFilter: filterParsed ? [filterParsed] : null,
+    isAll: false,
+    initialConfig: {
+      userId: null,
+      teamId: null,
+      isAll: null,
+    },
+  });
+
+  const {
+    dateRange,
+    selectedTimeView,
+    selectedMemberUserId,
+    selectedTeamId,
+    selectedUserId,
+    selectedEventTypeId,
+    selectedFilter,
+    selectedTeamName,
+    isAll,
+    initialConfig,
+  } = configFilters;
+  return (
+    <FilterProvider
+      value={{
+        filter: {
+          dateRange,
+          selectedTimeView,
+          selectedMemberUserId,
+          selectedTeamId,
+          selectedUserId,
+          selectedTeamName,
+          selectedEventTypeId,
+          selectedFilter,
+          isAll,
+          initialConfig,
+        },
+        setConfigFilters: (newConfigFilters) => {
+          setConfigFilters({
+            ...configFilters,
+            ...newConfigFilters,
+          });
+          utils.viewer.insights.rawData.invalidate();
+          const {
+            selectedMemberUserId,
+            selectedTeamId,
+            selectedUserId,
+            selectedEventTypeId,
+            selectedFilter,
+            isAll,
+            dateRange,
+            initialConfig,
+          } = {
+            ...configFilters,
+            ...newConfigFilters,
+          };
+          const [startTime, endTime] = dateRange || [null, null];
+          const newSearchParams = new URLSearchParams(undefined);
+          function setParamsIfDefined(key: string, value: string | number | boolean | null | undefined) {
+            if (value !== undefined && value !== null) newSearchParams.set(key, value.toString());
+          }
+
+          setParamsIfDefined("memberUserId", selectedMemberUserId);
+          setParamsIfDefined("teamId", selectedTeamId || initialConfig?.teamId);
+          setParamsIfDefined("userId", selectedUserId || initialConfig?.userId);
+          setParamsIfDefined("eventTypeId", selectedEventTypeId);
+          setParamsIfDefined("isAll", isAll || initialConfig?.isAll);
+          setParamsIfDefined("startTime", startTime?.toISOString());
+          setParamsIfDefined("endTime", endTime?.toISOString());
+          setParamsIfDefined("filter", selectedFilter?.[0]);
+        },
+        clearFilters: () => {
+          const { initialConfig } = configFilters;
+
+          const teamId = initialConfig?.teamId ? initialConfig.teamId : undefined;
+          const userId = initialConfig?.userId ? initialConfig.userId : undefined;
+          setConfigFilters({
+            selectedEventTypeId: null,
+            selectedFilter: null,
+            selectedMemberUserId: null,
+            selectedTeamId: teamId,
+            selectedTeamName: null,
+            selectedTimeView: "week",
+            selectedUserId: userId,
+            isAll: !!initialConfig?.isAll,
+            dateRange: [dayjs().subtract(1, "week"), dayjs(), "w"],
+            initialConfig,
+          });
+
+          const newSearchParams = new URLSearchParams();
+          if (teamId) newSearchParams.set("teamId", teamId.toString());
+          if (userId) newSearchParams.set("userId", userId.toString());
+        },
+      }}>
+      {children}
+    </FilterProvider>
+  );
+}
+
+const InsightsBasedElement = ({ startDate, endDate }: { startDate: string; endDate: string }) => {
   const { t } = useLocale();
 
   const user = useMeQuery().data;
@@ -155,11 +320,11 @@ const InsightsBasedElement = () => {
   }
 
   return (
-    <FiltersProvider>
+    <FiltersProvider startTime={startDate} endTime={endDate}>
       <Filters />
 
       <div className="mb-4 space-y-4">
-        {/* <BookingKPICards /> */}
+        <BookingKPICards />
 
         <BookingStatusLineChart />
 
@@ -623,14 +788,34 @@ const availableComponents: ExposedComponent[] = [
     description: "Display the list of upcoming booked events of the user",
     element: BookingsList,
     extraData: {
-      height: 5,
-      width: { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 },
+      height: 8,
+      width: { lg: 24, md: 20, sm: 12, xs: 8, xxs: 4 },
     },
   },
   {
     name: "Insights",
-    description: "View booking insights across your events",
+    description: `View booking insights across user events. For your reference, today date is ${dayjs().format(
+      "dddd"
+    )} ${dayjs().toISOString().split("T")[0]} (UTC time).`,
     element: InsightsBasedElement,
+    props: {
+      startDate: {
+        type: "string",
+        description: "Start date to load insights",
+        required: true,
+      },
+      endDate: {
+        type: "string",
+        description: "End date to load insights",
+        required: true,
+      },
+    },
+    loader: ({ startDate, endDate }) => {
+      return {
+        startDate,
+        endDate,
+      };
+    },
     extraData: {
       height: 14,
       width: { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 },

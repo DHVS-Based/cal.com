@@ -18,8 +18,7 @@ export const DateSelect = () => {
   return (
     <div className="custom-date max-w-96 w-full sm:w-auto">
       <DateRangePicker
-        value={[startValue, endValue, range]}
-        defaultValue={[startValue, endValue, range]}
+        value={[startValue, endValue]}
         onValueChange={(datesArray) => {
           const [selected, ...rest] = datesArray;
           const [start, end, range] = datesArray;
